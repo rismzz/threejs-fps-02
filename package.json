@@ -1,0 +1,1 @@
+{"description":"STEELHAVEN — an original tactical FPS built with three.js for make.fun's threejs-fps-02 bounty.","name":"steelhaven-threejs-fps","private":true,"scripts":{"serve":"python3 -m http.server 8080","test":"node tests/logic.test.mjs"},"type":"module","version":"1.0.0"}

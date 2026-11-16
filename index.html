@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>STEELHAVEN — Tactical FPS (three.js)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0d1420; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: #e8eef6; }
+  canvas { display: block; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .panel { background: rgba(8, 14, 22, 0.62); border: 1px solid rgba(140, 180, 220, 0.25); border-radius: 8px; backdrop-filter: blur(3px); }
+
+  #stats-panel { position: absolute; top: 16px; left: 16px; padding: 10px 14px; min-width: 168px; }
+  #stats-panel .row { display: flex; justify-content: space-between; gap: 18px; font-size: 13px; letter-spacing: 0.08em; padding: 2px 0; }
+  #stats-panel .row span { color: #9db4cc; text-transform: uppercase; }
+  #stats-panel .row strong { color: #fff; font-variant-numeric: tabular-nums; }
+
+  #radar-wrap { position: absolute; top: 16px; right: 16px; padding: 6px; }
+  #radar { width: 148px; height: 148px; display: block; }
+
+  #hp-wrap { position: absolute; left: 16px; bottom: 18px; padding: 12px 14px; width: 250px; }
+  #hp-wrap .label { display: flex; justify-content: space-between; font-size: 12px; letter-spacing: 0.12em; color: #9db4cc; text-transform: uppercase; margin-bottom: 6px; }
+  #hp-text { color: #fff; font-size: 15px; font-weight: 700; }
+  #hp-bar { height: 12px; background: rgba(255,255,255,0.12); border-radius: 6px; overflow: hidden; }
+  #hp-fill { height: 100%; width: 100%; background: #3ddc74; border-radius: 6px; transition: width 0.15s ease; }
+
+  #ammo-wrap { position: absolute; right: 16px; bottom: 18px; padding: 10px 16px; text-align: right; }
+  #ammo { font-size: 40px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  #ammo-state { font-size: 12px; color: #9db4cc; letter-spacing: 0.14em; margin-top: 3px; }
+
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%); }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: rgba(255,255,255,0.9); }
+  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); clip-path: polygon(0 0, 100% 0, 100% 32%, 0 32%, 0 68%, 100% 68%, 100% 100%, 0 100%); }
+  #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); clip-path: polygon(0 0, 32% 0, 32% 100%, 0 100%, 68% 0, 100% 0, 100% 100%, 68% 100%); }
+
+  #hitmarker { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; }
+  #hitmarker::before, #hitmarker::after { content: ""; position: absolute; background: #ffd76a; }
+  #hitmarker::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); clip-path: polygon(0 0, 100% 0, 100% 30%, 0 30%, 0 70%, 100% 70%, 100% 100%, 0 100%); }
+  #hitmarker::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); clip-path: polygon(0 0, 30% 0, 30% 100%, 0 100%, 70% 0, 100% 0, 100% 100%, 70% 100%); }
+  #hitmarker.headshot::before, #hitmarker.headshot::after { background: #ff5040; }
+
+  #banner { position: absolute; left: 50%; top: 20%; transform: translateX(-50%) translateY(-8px); text-align: center; opacity: 0; transition: opacity 0.3s ease, transform 0.3s ease; }
+  #banner.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #banner-title { font-size: 44px; font-weight: 800; letter-spacing: 0.18em; text-shadow: 0 2px 18px rgba(0,0,0,0.7); }
+  #banner-sub { font-size: 15px; color: #c9d8ea; letter-spacing: 0.1em; margin-top: 4px; text-shadow: 0 1px 10px rgba(0,0,0,0.7); }
+
+  #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0; background: radial-gradient(ellipse at center, transparent 52%, rgba(200, 20, 20, 0.55) 100%); }
+
+  /* ---------- overlays ---------- */
+  .overlay { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; background: rgba(5, 9, 15, 0.78); backdrop-filter: blur(4px); }
+  .overlay.visible { display: flex; }
+  .card { max-width: 560px; width: calc(100% - 40px); text-align: center; padding: 38px 36px; background: rgba(10, 17, 27, 0.9); border: 1px solid rgba(140, 180, 220, 0.3); border-radius: 14px; box-shadow: 0 18px 60px rgba(0,0,0,0.6); }
+  .card h1 { font-size: 40px; letter-spacing: 0.14em; font-weight: 800; }
+  .card h1 .accent { color: #ffd76a; }
+  .card p.tagline { color: #9db4cc; margin-top: 8px; font-size: 15px; line-height: 1.5; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 22px; margin: 24px auto 6px; max-width: 420px; text-align: left; font-size: 13.5px; }
+  .controls b { color: #ffd76a; font-weight: 700; letter-spacing: 0.04em; }
+  .controls span { color: #c9d8ea; }
+  .btn { pointer-events: auto; cursor: pointer; margin-top: 24px; padding: 13px 38px; font-size: 16px; font-weight: 700; letter-spacing: 0.14em; color: #0d1420; background: #ffd76a; border: none; border-radius: 8px; transition: transform 0.1s ease, background 0.15s ease; }
+  .btn:hover { background: #ffca45; transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  #end-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
+  #end-stats div { background: rgba(255,255,255,0.05); border-radius: 8px; padding: 10px 6px; }
+  #end-stats span { display: block; font-size: 11px; letter-spacing: 0.12em; color: #9db4cc; text-transform: uppercase; }
+  #end-stats strong { display: block; font-size: 22px; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  #webgl-error { display: none; margin-top: 16px; color: #ff7a70; font-size: 14px; line-height: 1.5; }
+  .foot { margin-top: 20px; font-size: 12px; color: #63788f; letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div id="stats-panel" class="panel">
+    <div class="row"><span>Score</span><strong id="score">0</strong></div>
+    <div class="row"><span>Wave</span><strong id="wave">1 / 5</strong></div>
+    <div class="row"><span>Hostiles</span><strong id="enemies-left">0</strong></div>
+    <div class="row"><span>Time</span><strong id="timer">00:00</strong></div>
+  </div>
+  <div id="radar-wrap" class="panel"><canvas id="radar" width="148" height="148"></canvas></div>
+  <div id="hp-wrap" class="panel">
+    <div class="label"><span>Health</span><span id="hp-text">100</span></div>
+    <div id="hp-bar"><div id="hp-fill"></div></div>
+  </div>
+  <div id="ammo-wrap" class="panel">
+    <div id="ammo">30</div>
+    <div id="ammo-state">/ ∞</div>
+  </div>
+  <div id="crosshair"></div>
+  <div id="hitmarker"></div>
+  <div id="banner"><div id="banner-title"></div><div id="banner-sub"></div></div>
+</div>
+<div id="vignette"></div>
+
+<div id="menu" class="overlay">
+  <div class="card">
+    <h1>STEEL<span class="accent">HAVEN</span></h1>
+    <p class="tagline">A tactical FPS in the browser. Night has fallen on the training compound and five waves of hostiles are inbound. Clear them all.</p>
+    <div class="controls">
+      <b>W A S D</b><span>Move</span>
+      <b>Mouse</b><span>Look (pointer lock)</span>
+      <b>Click / hold</b><span>Fire</span>
+      <b>R</b><span>Reload</span>
+      <b>Shift</b><span>Sprint</span>
+      <b>Space</b><span>Jump</span>
+    </div>
+    <p class="tagline">Rushers charge you in melee — shooters keep their distance and fire in bursts. Headshots deal 2.6× damage. Downed hostiles sometimes drop medkits.</p>
+    <button id="start-btn" class="btn">DEPLOY</button>
+    <p id="webgl-error">WebGL could not be initialised. This game needs a desktop browser with WebGL 2 (for example Chrome) and hardware acceleration enabled.</p>
+    <p class="foot">Built with three.js · An original entry for make.fun's “Make the best three.js tactical FPS” bounty</p>
+  </div>
+</div>
+
+<div id="pause" class="overlay">
+  <div class="card">
+    <h1>PAUSED</h1>
+    <p class="tagline">Pointer unlocked. Your operator is holding position.</p>
+    <button id="resume-btn" class="btn">RESUME</button>
+  </div>
+</div>
+
+<div id="end" class="overlay">
+  <div class="card">
+    <h1 id="end-title">COMPOUND CLEARED</h1>
+    <p class="tagline" id="end-sub"></p>
+    <div id="end-stats"></div>
+    <button id="restart-btn" class="btn">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
